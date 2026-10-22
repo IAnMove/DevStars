@@ -5,6 +5,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "GitHub Dev Evaluator",
   description: "Evaluate and classify developers based on their public GitHub activity",
+  metadataBase: new URL("https://githubstars.iaen.es"),
+  alternates: {
+    canonical: "/",
+    languages: { en: "/", "x-default": "/" },
+  },
 };
 
 export default function RootLayout({
