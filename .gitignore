@@ -17,8 +17,22 @@
 # debug
 npm-debug.log*
 
-# env files
-.env*.local
+# env files (never commit secrets; only the example template is tracked)
+.env
+.env.*
+!.env.example
+!.env.local.example
+
+# leaderboard database (SQLite + WAL/SHM sidecars) — never commit
+/data/
+data/*.db
+data/*.db-*
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+# snapshots taken by scripts/preserve-db.mjs before each build
+/.db-backups/
 
 # vercel
 .vercel
@@ -26,3 +40,6 @@ npm-debug.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# logs locales de agentes
+claude-log/
