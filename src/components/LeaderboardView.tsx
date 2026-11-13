@@ -38,7 +38,15 @@ export function LeaderboardView({
   /** Rows rendered by the server; null when the server could not read them. */
   initialEntries: LeaderboardRow[] | null;
 }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  // Fixed locale + UTC: the server and the browser must print the same text
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleDateString(language === "es" ? "es-ES" : "en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    });
   const [entries, setEntries] = useState<LeaderboardRow[]>(initialEntries ?? []);
   const [loading, setLoading] = useState(initialEntries === null);
 
@@ -147,9 +155,7 @@ export function LeaderboardView({
                       </div>
                     </td>
                     <td className="px-3 py-3 hidden text-xs text-gray-500 md:table-cell">
-                      <time dateTime={entry.evaluated_at}>
-                        {entry.evaluated_at.slice(0, 10)}
-                      </time>
+                      <time dateTime={entry.evaluated_at}>{formatDate(entry.evaluated_at)}</time>
                     </td>
                   </tr>
                 );

@@ -2,6 +2,8 @@
 
 Fecha: 13-nov-2026 · Rama de trabajo sobre el commit `1cd5ce4` ("paridad") · Sin cambios de código en esta fase.
 
+> **Actualización (fase B2, 13-nov-2026):** el bloque 1 está implementado y verificado. Cada hallazgo lleva su «Estado (B2)» y el detalle está en [Fase B2 — Bloque 1 implementado](#fase-b2--bloque-1-implementado), incluido el procedimiento de despliegue: **`next build` borra la base de datos viva**.
+
 ## Cómo se hizo
 
 - Lectura completa de `src/` (9 rutas, 15 componentes, 7 módulos de `lib`, i18n ES/EN).
@@ -16,15 +18,15 @@ Fecha: 13-nov-2026 · Rama de trabajo sobre el commit `1cd5ce4` ("paridad") · S
 
 | Tema | Estado |
 |---|---|
-| Memoria del proceso bajo carga y tamaño real en heap de cada entrada de caché | No medido. Las cifras de caché de este documento son estimaciones. |
-| Que `next build` borre `.next/standalone/data/` (y con ello la `.db` viva) | No probado. Es una sospecha razonable, ver P0-6. |
+| Memoria del proceso bajo carga y tamaño real en heap de cada entrada de caché | **Medido en B2** (ver «Fase B2»): los cuerpos van en `Buffer` fuera del heap; 200 entradas ocuparon 14,5 MB. |
+| Que `next build` borre `.next/standalone/data/` (y con ello la `.db` viva) | **Confirmado en B2**: la borra, en 16.1.6 y en 16.4.6. |
 | Configuración de Cloudflare (Cache Rules, WAF, si el origen es accesible sin pasar por CF) | No visible desde aquí. Solo se sabe que todo sale `cf-cache-status: DYNAMIC` o `BYPASS`. |
-| Errores parciales de GraphQL (organizaciones con restricciones de acceso) | Deducido del comportamiento documentado de Octokit, sin caso real reproducido. |
+| Errores parciales de GraphQL (organizaciones con restricciones de acceso) | Sigue sin caso real. En B2 se probó contra un servidor simulado (`data` + `errors` + nodos `null`): se acepta. |
 | Ratios de contraste | Calculados a mano con los colores aproximados de Tailwind, no con una herramienta. |
 | Interfaz en español | Revisada en código y JSON, sin captura con `language=es`. |
 | Resultado de ESLint sobre el código | No ejecutable: no hay configuración (ver P1-12). |
 | Paradoja "commits último año > commits histórico" (P2-3) | Deducida del código, sin comprobar con datos. |
-| Coste de memoria de `next/og` con heap de 200 MB | Sin probar; se medirá antes de darlo por bueno. |
+| Coste de memoria de `next/og` con heap de 200 MB | **Medido en B2**: no afecta al heap de V8 (46–79 MB usados durante unos 1000 renders), pero sube el RSS unos 70 MB (WASM y búferes); se estabiliza en torno a 380 MB. |
 | Versión de Node del VPS | Desconocida (local: v24.22.1). |
 
 ---
@@ -32,6 +34,8 @@ Fecha: 13-nov-2026 · Rama de trabajo sobre el commit `1cd5ce4` ("paridad") · S
 ## P0: corregir primero
 
 ### P0-1. Usuario inexistente devuelve 500 con el mensaje crudo de GitHub
+
+> **Estado (B2): hecho.** `GET /api/github/<inexistente>` → `404 {"error":"GitHub user not found","code":"not_found"}`; ningún mensaje de GitHub llega al cliente (el detalle va solo al log). La página `/user/<inexistente>` responde 404 real en cuanto el servidor sabe que no existe (caché negativa de 10 min) y lleva `noindex` desde el primer momento. Pantalla de error con navegación, traducida por `code`.
 
 - **Evidencia.** `GET /api/github/zz-no-existe-xq9` → `HTTP 500` con `{"error":"Request failed due to following response errors:\n - Could not resolve to a User with the login of 'zz-no-existe-xq9'."}`. Igual en local y en `ref/prod/api__github__zz-no-existe-xq9.*`. La página muestra ese texto tal cual bajo un "Error" rojo, sin navegación ni selector de idioma (capturas a 1366 y 412).
 - **Causa.** `route.ts` decide el 404 con `message.includes("Not Found")`, pero GraphQL dice "Could not resolve to a User". Además Octokit lanza antes de que se llegue al `if (!user) throw new Error("User not found")` de `github.ts`.
@@ -46,6 +50,8 @@ Fecha: 13-nov-2026 · Rama de trabajo sobre el commit `1cd5ce4` ("paridad") · S
   - Registrar el detalle solo en el log del servidor.
 
 ### P0-2. Sin límite por IP y con caché sin tope: cualquiera puede agotar la cuota de GitHub o la memoria
+
+> **Estado (B2): hecho.** Caché LRU (200 entradas / 24 MB, cuerpos en `Buffer` fuera del heap), caché negativa, *stale-if-error* de 24 h, límite por IP (10/min y 60/h para fallos de caché; 10/min y 60/h para `POST`), reserva de cuota (100 puntos), tope de 300 repos propios y de 50 en cola, y máximo de 3 evaluaciones simultáneas con 10 en espera. Medido con `scripts/mock-test.sh`: ver «Verificación».
 
 - **Evidencia (código).**
   - `lib/github.ts`: `cache = new Map()` con TTL de 30 min y **sin tamaño máximo**. Cada entrada guarda el JSON completo normalizado (31 KB para torvalds, 59 KB para IAnMove en `ref/prod`; en heap ocupará varias veces más).
@@ -67,6 +73,8 @@ Fecha: 13-nov-2026 · Rama de trabajo sobre el commit `1cd5ce4` ("paridad") · S
 
 ### P0-3. `/[username]` captura `/robots.txt`, `/sitemap.xml`, `/favicon.ico` y cualquier ruta basura
 
+> **Estado (B2): hecho.** `/robots.txt`, `/sitemap.xml`, `/favicon.ico`, `/icon.svg` y `/apple-icon.png` son rutas propias (confirmado: tienen prioridad sobre `[username]` en 16.4.6). `/<usuario válido>` sigue dando 307; cualquier cosa que no pueda ser un login de GitHub (`/foo.php`, `/.env`, `/..%2Fapi`) da 404.
+
 - **Evidencia.**
   - Local y producción: `/robots.txt` → `307 Location: /user/robots.txt` (igual para `sitemap.xml` y `favicon.ico`).
   - `/foo.php` → `307 /user/foo.php` → `200` con render dinámico.
@@ -80,6 +88,8 @@ Fecha: 13-nov-2026 · Rama de trabajo sobre el commit `1cd5ce4` ("paridad") · S
 
 ### P0-4. Next 16.1.6 tiene avisos de seguridad abiertos (uno crítico)
 
+> **Estado (B2): hecho para Next/React.** `next@16.4.6`, `react@19.3.1`, `react-dom@19.3.1`, `eslint-config-next@16.4.6`. `npm audit --omit=dev` ya no lista `next`; quedan 13 avisos (8 moderados, 5 altos), todos de herramientas de build que siguen en `dependencies` (typescript-eslint, picomatch, source-map-js…): bloque 3.
+
 - **Evidencia.** `npm audit --omit=dev`: 21 vulnerabilidades (1 crítica, 10 altas, 9 moderadas, 1 baja). La crítica es `next`, con avisos que cubren `<16.1.7`, `<16.2.3` y `<16.2.5`:
   - request smuggling en rewrites,
   - DoS con Server Components (dos avisos),
@@ -92,11 +102,15 @@ Fecha: 13-nov-2026 · Rama de trabajo sobre el commit `1cd5ce4` ("paridad") · S
 
 ### P0-5. `POST /api/leaderboard` devuelve 500 sin cuerpo con JSON válido pero inesperado
 
+> **Estado (B2): hecho.** `{"username":123}`, `null`, `[]`, cuerpo vacío, JSON roto o cuerpo de más de 2 KB → `400` con `error` y `code`.
+
 - **Evidencia.** `POST` con `{"username":123}` → `500` con cuerpo vacío. `POST` con `null` → `500` con cuerpo vacío.
 - **Causa.** `body.username?.trim()` se ejecuta fuera del `try`: `123.trim` no es función y `null.username` lanza.
 - **Propuesta.** Validar que el cuerpo es un objeto y que `username` es string, y responder `400 {"error":"Invalid username"}` (misma forma que hoy).
 
 ### P0-6. Riesgo operativo: la base de datos viva está dentro de `.next/standalone/`
+
+> **Estado (B2): CONFIRMADO y mitigado.** Ver «Comprobación del marcador» más abajo.
 
 - **Evidencia.** `server.js` hace `chdir` a `.next/standalone`, así que `process.cwd()/data/leaderboard.db` es `.next/standalone/data/leaderboard.db` (documentado en el propio `leaderboard-db.ts`). `next build` regenera `.next/standalone`.
 - **No verificado.** Falta comprobar que el build borra esa carpeta: poner un fichero marcador en `.next/standalone/data/`, compilar y mirar si sobrevive.
@@ -134,6 +148,8 @@ Fecha: 13-nov-2026 · Rama de trabajo sobre el commit `1cd5ce4` ("paridad") · S
 
 ### P1-3. SEO: mismo título en todas las páginas, sin Open Graph, sin canonical, ficha sin contenido en el HTML
 
+> **Estado (B2): hecho en lo que toca a datos y metadatos.** Título, descripción, canonical, Open Graph y Twitter por página; `generateMetadata` y JSON-LD en la ficha usando solo datos locales; imagen social en `/og/<usuario>.png`; `/leaderboard` se renderiza en servidor con la tabla en el HTML; sitemap con los usuarios del ranking; marca única «GitHub Stars». Pendiente para el bloque 2: `h1` y contenido de la ficha en el HTML inicial.
+
 - **Evidencia.**
   - `document.title` es "GitHub Dev Evaluator" en `/`, `/leaderboard` y `/user/*`.
   - `<html lang="en">` es fijo.
@@ -152,6 +168,8 @@ Fecha: 13-nov-2026 · Rama de trabajo sobre el commit `1cd5ce4` ("paridad") · S
 
 ### P1-4. Sin cabeceras de caché en las APIs, y HTML estático con `s-maxage` de un año
 
+> **Estado (B2): hecho.** Cabeceras por ruta (tabla en «Verificación»). Next sí respeta el `Cache-Control` de `next.config.ts` en la home prerenderizada. Sin Cache Rule en Cloudflare (decisión del propietario): solo las imágenes `/og/*.png` se cachean en el borde, por extensión.
+
 - **Evidencia.**
   - `/api/github/*` y `/api/leaderboard` no llevan `Cache-Control`.
   - `/` y `/leaderboard` llevan `cache-control: s-maxage=31536000`.
@@ -166,6 +184,8 @@ Fecha: 13-nov-2026 · Rama de trabajo sobre el commit `1cd5ce4` ("paridad") · S
   - Cloudflare solo cachea por extensión salvo que haya una regla. Para que el JSON y la imagen OG se cacheen en el borde hace falta una Cache Rule (acción del revisor); las cabeceras quedan preparadas para ello.
 
 ### P1-5. El reintento por rate limit bloquea la petición hasta 120 s, y no hay timeouts
+
+> **Estado (B2): hecho.** `fetch` nativo (se elimina `@octokit/rest`), 15 s por llamada, 60 s por evaluación, un reintento corto solo para 5xx y fallos de red, nada de esperas de 60 s, datos parciales aceptados, y `Retry-After` propagado.
 
 - **Evidencia (código).**
   - `fetchWithRetry` espera 60 s fijos hasta dos veces **dentro** de la petición HTTP. Cloudflare corta a los 100 s con un 524.
@@ -182,6 +202,8 @@ Fecha: 13-nov-2026 · Rama de trabajo sobre el commit `1cd5ce4` ("paridad") · S
 
 ### P1-6. Sin cabeceras de seguridad, y `X-Powered-By` expuesto
 
+> **Estado (B2): hecho.** `poweredByHeader: false`, CSP sin nonces, `nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, HSTS, y validación del username en `status`.
+
 - **Evidencia.** Las respuestas no llevan `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`/`frame-ancestors`, `Permissions-Policy` ni CSP. Sí llevan `x-powered-by: Next.js`.
 - **Lo que está bien.**
   - `GITHUB_TOKEN` solo se lee en servidor.
@@ -195,6 +217,8 @@ Fecha: 13-nov-2026 · Rama de trabajo sobre el commit `1cd5ce4` ("paridad") · S
   - Validar el username en `/api/leaderboard/status/[username]`, que hoy no valida nada.
 
 ### P1-7. Incoherencias del leaderboard
+
+> **Estado (B2): hecho salvo paginación.** `status` añade `inLeaderboard` y `entry` (posición, puntuación, periodo `all`, fecha, `canRefresh`); el botón consulta su estado al montar; búsquedas `NOCASE`; orden estable; migración `user_version = 1`; la ficha y el ranking explican qué periodo y qué fecha usa la puntuación del ranking, y el ranking enlaza a la ficha con `?period=all`. Sigue pendiente: más de 100 filas.
 
 - **`status` devuelve `done` para quien nunca fue evaluado.** `GET /api/leaderboard/status/zz-nunca-evaluado` → `{"status":"done"}`. En producción, `torvalds` también da `done` sin estar en el ranking.
 - **El botón no consulta su estado al montar.** Tras recargar siempre dice "Guardar en Ranking", aunque el usuario ya esté dentro.
@@ -215,6 +239,8 @@ Fecha: 13-nov-2026 · Rama de trabajo sobre el commit `1cd5ce4` ("paridad") · S
   - Mostrar la posición del usuario en el ranking dentro de su ficha.
 
 ### P1-8. Estados de carga y error pobres
+
+> **Estado (B2): parcial.** Pantallas de error por `code` con navegación, «Reintentar» y enlaces reales. El esqueleto de carga queda para el bloque 2.
 
 - **Evidencia.**
   - La carga es un spinner a pantalla completa, sin navegación ni selector de idioma. Torvalds tardó 3,8 s sin caché.
@@ -256,6 +282,8 @@ Fecha: 13-nov-2026 · Rama de trabajo sobre el commit `1cd5ce4` ("paridad") · S
   - Avatares con `&s=128` o `&s=64` y `loading="lazy"`.
 
 ### P1-11. Textos e i18n
+
+> **Estado (B2): parcial.** Corregido el texto de privacidad (ES/EN), la marca y el enlace del texto de compartir (ahora apunta a la ficha en el sitio), y `<html lang>` sigue al idioma elegido. El resto, bloque 2.
 
 - **"No se almacena ninguna información" es falso.** `app.disclaimer` dice "No data is stored", pero el ranking guarda usuario, avatar, nombre y puntuación.
 - **Texto de compartir.** `generateShareableSummary` está fijo en inglés y enlaza al repo de GitHub, no a `https://githubstars.iaen.es/user/<usuario>`. Tampoco usa `navigator.share` ni controla el fallo del portapapeles.
@@ -339,50 +367,17 @@ Después de las subidas: `npm audit fix` para las transitivas, mover las herrami
 
 Cada bloque termina con build, `tsc`, lint, arranque standalone, comparación de las respuestas JSON con `ref/prod` (mismas claves; solo campos añadidos) y `server_mem`.
 
-### Bloque 1: backend, rendimiento, seguridad y SEO
+### Bloque 1: backend, rendimiento, seguridad y SEO — HECHO (fase B2)
 
-1. **Comprobaciones previas.** Prueba del marcador en `.next/standalone/data/` (P0-6). Medir el RSS base y el coste en heap por entrada de caché.
-2. **Subir Next a 16.4.6 y React a 19.3.1** (P0-4). Rehacer el build y comprobar la paridad de rutas y respuestas.
-3. **`lib/github.ts`.**
-   - Errores tipados con `code`.
-   - Timeout, reintento corto y nada de esperas de 60 s.
-   - Datos parciales.
-   - Tope de repos.
-   - Caché LRU con TTL, tope de tamaño, caché negativa y *stale-if-error*.
-   - Conservar la deduplicación de peticiones en vuelo.
-   - Cortacircuitos por cuota restante.
-   - `fetch` nativo en lugar de Octokit.
-4. **`lib/rate-limit.ts`.** Ventana deslizante en memoria por `CF-Connecting-IP`, con `Map` acotado. Se aplica a los fallos de caché de `/api/github` y a `POST /api/leaderboard`.
-5. **Rutas de API.**
-   - Validación única en `lib/username.ts`.
-   - 404, 429, 502, 503 y 504 con `error` más `code` y `Retry-After`.
-   - `Cache-Control` por ruta (P1-4).
-   - `POST` robusto (P0-5).
-   - `status` con `inLeaderboard` y validación.
-   - Errores saneados.
-6. **`leaderboard-db.ts` y cola.**
-   - Migración idempotente a `user_version = 1` (índices `IF NOT EXISTS`).
-   - `NOCASE`, `busy_timeout`, orden estable.
-   - Tope de cola.
-   - Cierre limpio.
-   - Probar siempre contra una copia de la réplica.
-7. **Enrutado y SEO.**
-   - `[username]` con validación y `notFound()`.
-   - `robots.ts`, `sitemap.ts` (con los usuarios del ranking), `icon.svg` y favicon.
-   - `site.ts`.
-   - Metadatos del layout raíz.
-   - `generateMetadata` en `/user/[username]` y `/leaderboard` usando solo datos locales.
-   - `opengraph-image` con `next/og`, midiendo memoria.
-   - `noindex` para los perfiles que no estén en el ranking.
-8. **`next.config.ts`.** `poweredByHeader: false` y cabeceras de seguridad (CSP sin nonces).
-9. **Verificación.**
-   - `/robots.txt`, `/sitemap.xml` y `/favicon.ico` → 200 con su tipo de contenido.
-   - `/foo.php` → 404.
-   - `/torvalds` → 307.
-   - Usuario inexistente → 404 con `code`.
-   - Ráfaga de peticiones → 429.
-   - 20 peticiones simultáneas al mismo usuario → una sola llamada a GitHub (mismo `rateLimit.remaining` en todas).
-   - RSS por debajo del límite tras la carga.
+- [x] **Comprobaciones previas.** Marcador en `.next/standalone/data/` (se borra: ver abajo), RSS base y coste de la caché medidos.
+- [x] **Next 16.4.6 y React 19.3.1.** Build, `tsc` y paridad de rutas y respuestas.
+- [x] **`lib/github.ts`.** Errores tipados, timeouts, reintento corto, datos parciales, tope de repos, caché LRU con TTL, caché negativa, *stale-if-error*, deduplicación en vuelo, reserva de cuota, `fetch` nativo.
+- [x] **`lib/rate-limit.ts`.** Ventana deslizante por `CF-Connecting-IP` (respaldo: `X-Forwarded-For`, que Next rellena con la IP del socket). IPv6 agrupado por /64.
+- [x] **Rutas de API.** `lib/username.ts`, `error` + `code`, `Retry-After`, `Cache-Control`, `POST` robusto, `status` ampliado.
+- [x] **`leaderboard-db.ts` y cola.** Migración idempotente, `NOCASE`, `busy_timeout`, orden estable, tope de cola, cierre limpio y *checkpoint* tras cada escritura.
+- [x] **Enrutado y SEO.** `[username]` validado, `robots.ts`, `sitemap.ts`, iconos, `site.ts`, metadatos, JSON-LD, imagen social, `noindex` fuera del ranking.
+- [x] **`next.config.ts`.** Sin `X-Powered-By`, cabeceras de seguridad y CSP.
+- [x] **Verificación.** Ver la sección siguiente.
 
 ### Bloque 2: UX, UI, accesibilidad, móvil e i18n
 
@@ -405,10 +400,160 @@ Cada bloque termina con build, `tsc`, lint, arranque standalone, comparación de
 6. **Cerrar los PRs #1 y #2** indicando qué se incorporó de cada uno.
 7. **P2 de puntuación** (reviews, commits históricos): solo con el visto bueno del revisor, porque cambian puntuaciones ya publicadas.
 
-## Decisiones que necesito del revisor
+## Decisiones del propietario (recibidas antes de la fase B2)
 
-1. ¿Se mantiene el 307 de `/<usuario>` o se pasa a 308?
-2. Marca única: ¿"GitHub Dev Evaluator", "DevStars" o "GitHub Stars"?
-3. ¿Se aceptan cambios de puntuación (P2-1 a P2-3) o se congela el algoritmo?
-4. ¿El origen solo es accesible a través de Cloudflare? De eso depende que `CF-Connecting-IP` sea fiable. ¿Se puede crear una Cache Rule para `/api/github/*` y las imágenes OG?
-5. ¿Qué versión de Node corre en el VPS?
+1. Se mantiene el **307** de `/<usuario>`. Rutas reservadas y cualquier cosa con extensión quedan fuera; los usernames imposibles dan 404.
+2. Marca única: **«GitHub Stars»**. «DevStars» solo es el nombre del repositorio.
+3. El algoritmo de puntuación **no se toca** salvo bugs claros. La incoherencia ranking/ficha se resuelve explicando el periodo, sin cambiar puntuaciones publicadas.
+4. **Sin Cache Rule** en Cloudflare: solo `Cache-Control`. Límite por IP con `CF-Connecting-IP`; cerrar el origen a Cloudflare queda para el propietario.
+5. Se retira «No data is stored» y se explica qué se guarda.
+
+Sigue sin saberse la versión de Node del VPS (local: v24.22.1).
+
+---
+
+## Fase B2 — Bloque 1 implementado
+
+Fecha: 13-nov-2026. Todo lo que sigue está comprobado en esta rama con `npm run build`, `npx tsc --noEmit`, el servidor standalone con token real y `scripts/mock-test.sh`.
+
+### Comprobación del marcador (P0-6): `next build` borra la base de datos viva
+
+- **Prueba.** Se dejó un fichero marcador y una `.db` en `.next/standalone/data/` y se ejecutó `next build`.
+- **Resultado.** La carpeta `data/` desaparece entera. Ocurre igual con Next 16.1.6 y con 16.4.6.
+- **Consecuencia.** Compilar en el mismo directorio en el que corre producción **borra el ranking**, salvo que se haga copia antes.
+- **Mitigación incluida.**
+  - `npm run build` ejecuta ahora `scripts/preserve-db.mjs` antes y después (`prebuild`/`postbuild`): saca una copia consistente a `.db-backups/<fecha>/` (API de backup de SQLite, incluye lo que haya en el WAL) y la devuelve a `.next/standalone/data/` si el build la ha borrado. No sobrescribe ni borra ninguna `.db`. Si no puede hacer la copia, detiene el build.
+  - Tras cada escritura se hace *checkpoint* del WAL, de modo que `leaderboard.db` está completo por sí solo.
+  - Si un build falla a medias, el siguiente `npm run build` restaura la última copia.
+- **Límites de la mitigación.**
+  - Solo actúa con `npm run build`. Con `npx next build` a secas no hay copia.
+  - Si el servidor sigue arrancado durante el build, lo que se guarde en ese intervalo se pierde. Hay que **parar, compilar y arrancar**.
+  - `.db-backups/` crece una copia por build; se limpia a mano.
+- **Recomendación.** Definir `DB_PATH` (ya existía, sigue siendo opcional) apuntando fuera de `.next`, por ejemplo `/var/lib/githubstars/leaderboard.db`, moviendo allí el fichero actual con el servidor parado. Con `DB_PATH` definido el script no hace nada.
+
+### Procedimiento de despliegue de este bloque
+
+1. Copia manual de seguridad de `.next/standalone/data/leaderboard.db*` (los tres ficheros), por si acaso.
+2. Parar el servidor.
+3. `git pull`, `npm ci`, `npm run build` (no `npx next build`). Comprobar en la salida las dos líneas `[preserve-db]`: «snapshot saved… (N rows)» y «database restored… (N rows)».
+4. Copiar `.next/static` y `public` al standalone como hasta ahora.
+5. Arrancar con `node .next/standalone/server.js` y las mismas variables. Al abrir la base de datos se aplica la migración `user_version = 1` (dos índices; no toca filas).
+6. Comprobar `/api/leaderboard` y `/sitemap.xml`.
+- **Vuelta atrás.** La app anterior funciona con la `.db` ya migrada (probado: lee, busca y hace *upsert* igual; `integrity_check` correcto). No hace falta deshacer nada en la base de datos.
+
+### Qué cambió
+
+**Dependencias**
+- `next` 16.4.6, `react`/`react-dom` 19.3.1, `eslint-config-next` 16.4.6. Se elimina `@octokit/rest`.
+
+**GitHub (`src/lib/github.ts`)**
+- `fetch` nativo contra GraphQL, con 15 s por llamada y 60 s por evaluación. Un reintento corto solo ante 5xx o fallo de red.
+- Errores tipados (`GitHubError`) con mensaje público fijo; el detalle va solo al log.
+- Datos parciales aceptados si viene `user`; se filtran los nodos `null`.
+- Topes: 300 repos propios, 200 PRs, 200 issues, 4 llamadas de paginación.
+- Caché LRU de 200 entradas o 24 MB. Se guarda el JSON ya serializado en un `Buffer` (fuera del heap) junto a un resumen pequeño para metadatos, imagen social y ranking.
+- Caché negativa de 10 min, *stale-if-error* de 24 h, deduplicación de peticiones en vuelo.
+- Reserva de cuota: por debajo de 100 puntos solo se sirve caché. Si GitHub manda `Retry-After`, se respeta sin volver a llamar.
+- Máximo de 3 evaluaciones simultáneas y 10 en espera; el resto recibe `503 busy`.
+- Variable opcional nueva `GITHUB_GRAPHQL_URL` (GitHub Enterprise o servidor simulado). `GITHUB_TOKEN` no cambia.
+
+**Límite por IP (`src/lib/rate-limit.ts`)**
+- Ventana deslizante en memoria, hasta 5000 claves. IP tomada de `CF-Connecting-IP`, con `X-Forwarded-For` como respaldo (Next lo rellena con la IP del socket). IPv6 agrupado por /64.
+- `/api/github`: 10/min y 60/h, contando **solo** los fallos de caché. Las respuestas de caché, las negativas y las peticiones que se suman a una evaluación en curso no cuentan.
+- `POST /api/leaderboard`: 10/min y 60/h. Imágenes sociales: 20/min y 200/h por renders nuevos.
+- Aviso: mientras el origen sea accesible sin pasar por Cloudflare, `CF-Connecting-IP` se puede falsificar.
+
+**API (formas conservadas; solo se añaden campos)**
+
+| Ruta | Antes | Ahora |
+|---|---|---|
+| `GET /api/github/<u>` 200 | `{data, rateLimit}` | Igual, más `fetchedAt`. Cabeceras `ETag`, `X-Cache: HIT\|MISS\|STALE`, `Cache-Control: public, max-age=300, s-maxage=1800, stale-while-revalidate=86400` (60 s si es copia caducada). Admite `If-None-Match` → 304. |
+| `GET /api/github/<u>` error | `500 {error: <texto de GitHub>}` | `{error, code}` con 400, 404, 429, 502, 503 o 504, `Retry-After` cuando procede y `no-store`. |
+| `GET /api/leaderboard` | array de filas | Idéntico byte a byte a `ref/prod`. `Cache-Control: public, max-age=30, s-maxage=60, stale-while-revalidate=300`. Orden estable en empates. |
+| `POST /api/leaderboard` | 500 vacío con cuerpos raros | 400 con `error` y `code`; 429 por IP; 503 `busy` con la cola llena (50). |
+| `GET /api/leaderboard/status/<u>` | `{status, position?}` | Igual, más `inLeaderboard` y, si está, `entry: {username, rank, score, title, period: "all", evaluatedAt, canRefresh}`. Valida el username (400). |
+
+Códigos de `code`: `invalid_username`, `invalid_request`, `not_found`, `rate_limited` (429, por IP), `quota_exhausted` (503, cuota de GitHub), `busy` (503), `upstream` (502), `timeout` (504), `config` (503), `internal` (500).
+
+**Base de datos (`src/lib/leaderboard-db.ts`)**
+- Mismo fichero y misma tabla. Migración a `user_version = 1`: `idx_leaderboard_rank` e `idx_leaderboard_username_nocase`, ambos `IF NOT EXISTS`.
+- Búsquedas sin distinguir mayúsculas, `busy_timeout`, *checkpoint* tras escribir y cierre limpio al salir.
+
+**Enrutado y SEO**
+- `/<usuario>` → 307 solo si puede ser un login de GitHub; si no, 404. `/user/<inválido>` → 404.
+- `robots.txt`, `sitemap.xml` (home, ranking y usuarios del ranking con `lastmod`), `favicon.ico`, `icon.svg`, `apple-icon.png`.
+- Metadatos por página: título, descripción, canonical, Open Graph y Twitter. La ficha usa solo la fila del ranking o la caché en memoria: **nunca llama a GitHub para el `<head>`**.
+- Solo se indexan las fichas que están en el ranking; el resto lleva `noindex, follow`. Las del ranking llevan además JSON-LD `ProfilePage`.
+- `/leaderboard` se renderiza en servidor: la tabla va en el HTML.
+- Imagen social en `/og/<usuario>.png` y `/og/_site.png` (1200×630, `next/og`). Solo datos locales; un usuario desconocido recibe la tarjeta genérica sin render propio. Al acabar en `.png`, Cloudflare las cachea por extensión sin necesidad de regla.
+- Cabeceras de seguridad en `next.config.ts` y `X-Powered-By` desactivado. La CSP permite además `static.cloudflareinsights.com`, por si se activa Web Analytics.
+
+**Coherencia ranking/ficha (sin tocar puntuaciones)**
+- La ficha muestra, si el usuario está en el ranking, su posición, su puntuación, que corresponde a «Todo el historial» y la fecha en que se calculó, con un botón para ver ese periodo.
+- El ranking explica lo mismo bajo el título y enlaza a la ficha con `?period=all`.
+- Los metadatos y la imagen social indican el periodo («all-time» para el ranking, «last year» para fichas no guardadas).
+- El botón pasa a «Actualizar en el ranking» cuando han pasado más de 24 h desde la evaluación.
+
+**Textos**
+- Marca «GitHub Stars» en título, cabecera, texto de compartir (que ahora enlaza a la ficha) e imagen social.
+- Texto de privacidad nuevo en ES y EN: qué se guarda al pulsar «Guardar en el ranking» y que las fichas se calculan al vuelo y se cachean en memoria.
+- Pantallas de error y de 404 traducidas, con navegación.
+
+### De los PRs #1 y #2
+
+- **Incorporado del #1:** `metadataBase` y canonical por perfil (en `generateMetadata` de la página, no en un layout).
+- **Incorporado del #2:** `src/lib/site.ts`, `app/robots.ts`, `app/sitemap.ts` (ampliado), y título, descripción, canonical, Open Graph y Twitter de `/leaderboard`.
+- **Descartado:** hreflang sobre la misma URL, canonical `/` en el layout raíz, `keywords`, y la página mínima de ranking del #2.
+
+### Verificación
+
+**Servidor real (`start_server`, token real, réplica de la base de datos)**
+
+| Comprobación | Resultado |
+|---|---|
+| `/`, `/leaderboard`, `/user/torvalds`, `/user/IAnMove` | 200 |
+| `/user/zz-no-existe-xq9` | 200 con `noindex` la primera vez; **404** después de que la API haya respondido que no existe |
+| `/torvalds` | 307 → `/user/torvalds` |
+| `/foo.php`, `/.env`, `/wp-login.php`, `/..%2Fapi`, `/user/-abc` | 404 |
+| `/robots.txt`, `/sitemap.xml`, `/favicon.ico` | 200 con `text/plain`, `application/xml`, `image/x-icon` |
+| `/api/github/torvalds` dos veces | 3,9 s `MISS`, luego 3 ms `HIT`, mismo cuerpo. Mismas claves que `ref/prod` más `fetchedAt` |
+| `/api/github/zz-no-existe-xq9` | `404 {"error":"GitHub user not found","code":"not_found"}`; la segunda vez sin llamar a GitHub |
+| Username inválido | `400 … "code":"invalid_username"` |
+| Ráfaga desde una IP | 10 fallos de caché pasan; el 11.º da `429` con `Retry-After`. Otra IP no se ve afectada y la IP limitada sigue leyendo de caché |
+| 20 peticiones simultáneas a un usuario sin caché | 20 respuestas 200 idénticas y **una** línea `fetched` en el log |
+| `/api/leaderboard` | Idéntico byte a byte a `ref/prod/api__leaderboard.body` |
+| `/api/leaderboard/status/IAnMove` | `{"status":"done","inLeaderboard":true,"entry":{…"rank":1,"score":48,"period":"all"…}}` |
+| `POST` con `{"username":123}`, `null`, texto | 400 |
+| `/og/_site.png`, `/og/IAnMove.png`, `/og/torvalds.png` | 200 `image/png`, 105–141 KB, 70–270 ms el primer render. Revisadas a la vista con captura |
+| Datos de IAnMove frente a `ref/prod` | 47 repos, 200 PRs, 0 issues y 945 commits en ambos |
+| Memoria (`server_mem`) | 98 MB al arrancar; 273 MB de RSS tras evaluaciones, imágenes y 700 peticiones |
+
+**Servidor simulado (`npm run test:mock`, sin gastar cuota): 38 comprobaciones, todas pasan**
+
+- Deduplicación: 20 simultáneas → 1 llamada.
+- Caché negativa: 2 peticiones → 1 llamada, y la página pasa a 404.
+- 5xx: un reintento y mensaje saneado.
+- Datos parciales aceptados.
+- Perfil grande: 3 llamadas, 302 repos, 200 PRs.
+- *Stale-if-error*: copia caducada servida con `X-Cache: STALE`.
+- Timeout: 504 a los 15 s.
+- Reserva de cuota y `Retry-After`: 503 sin llamar a GitHub.
+- Cola llena: 503 `busy`. Tope de concurrencia: 503 `busy` con `Retry-After: 5`.
+- Carga: 300 perfiles distintos (40 grandes) → caché en 200 entradas y 14,5 MB. Pico de `heapUsed` 82–94 MB con el límite de 200 MB; RSS 304–310 MB (cuatro ejecuciones).
+- Imágenes sociales (prueba aparte): unos 1000 renders de 130 perfiles → `heapUsed` 46–79 MB; el RSS sube a 366 MB en la primera pasada y se queda en 381 MB tras ocho. Una sola IP: 20 renders nuevos por minuto, luego 429.
+- Apagado con SIGTERM: WAL vacío. El token no aparece en ningún log.
+
+**Base de datos**
+- La réplica migrada conserva la tabla idéntica a `ref/leaderboard-schema.sql`. El código anterior la lee, busca y hace *upsert* sin cambios.
+
+### Dudas y límites que quedan
+
+- **RSS.** El heap vivo se queda muy por debajo de 200 MB (`heapTotal` unos 176 MB), pero el RSS es bastante mayor que al arrancar (98 MB): 273 MB en la prueba con token real, 304–310 MB con 300 perfiles simulados y hasta 381 MB forzando unos 1000 renders de imágenes sociales, donde se estabiliza. Cabe en 1,9 GB. Si se quiere bajar, lo que más pesa y es prescindible son las imágenes por usuario (`/og/<usuario>.png`): se pueden dejar solo con la tarjeta genérica.
+- **Perfiles lentos.** Un perfil real con tres páginas tardó 25 s (GitHub responde lento a esa consulta). El límite por evaluación es de 60 s; por encima se devuelve 504.
+- **Tope de 300 repos.** Para cuentas con más de 300 repos propios puede variar ligeramente la puntuación de «Todo el historial» respecto a lo publicado (años activos). El resto de métricas satura mucho antes.
+- **`robots.txt` permite `/api/github/`.** La ficha se pinta en el navegador con ese JSON; si se bloquea, un buscador que ejecute JS vería una pantalla de error. Las respuestas llevan `X-Robots-Tag: noindex`. Es un cambio respecto a lo propuesto en P1-3; se revierte quitando una línea de `app/robots.ts`.
+- **404 de rutas dinámicas.** El estado HTTP es 404, pero Next entrega el cuerpo como esqueleto y lo pinta en el navegador. Las rutas que no encajan con nada sí llevan el HTML completo.
+- **Cuota y cabeceras.** El objeto `rateLimit` de GraphQL y las cabeceras `x-ratelimit-*` no siempre coinciden (visto: 4929 frente a 4970). Se usa el menor.
+- **Idioma.** No hay captura con la interfaz en español; se comprobó que ES y EN tienen las mismas 155 claves.
+- **Sin comprobar.** Que la CSP no bloquee nada inyectado por Cloudflare en producción (el HTML de `ref/prod` no trae scripts de Cloudflare), y el comportamiento real con un límite secundario de GitHub (solo simulado).
+- **Pendiente de otros bloques.** ESLint sigue sin configuración (bloque 3). Radar y gráfico de evolución siguen con recharts (bloque 2).

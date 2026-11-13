@@ -31,6 +31,8 @@ data/*.db-*
 *.db-wal
 *.db-shm
 *.db-journal
+# snapshots taken by scripts/preserve-db.mjs before each build
+/.db-backups/
 
 # vercel
 .vercel

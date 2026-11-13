@@ -84,6 +84,7 @@ function getDb(): Database.Database {
     db.pragma("journal_mode = WAL");
     migrate(db);
     holder.db = db;
+    checkpoint();
 
     if (!holder.exitHook) {
       holder.exitHook = true;
@@ -98,12 +99,8 @@ function getDb(): Database.Database {
 export function closeDb(): void {
   const db = holder.db;
   if (!db) return;
+  checkpoint();
   holder.db = null;
-  try {
-    db.pragma("wal_checkpoint(TRUNCATE)");
-  } catch {
-    // another connection may hold the file; closing is still fine
-  }
   try {
     db.close();
   } catch {
@@ -131,6 +128,21 @@ export function upsertEntry(entry: LeaderboardEntry): void {
   `
     )
     .run(entry);
+  checkpoint();
+}
+
+/**
+ * Folds the WAL into the main file. Writes are rare (one per saved profile),
+ * so doing it after each one keeps leaderboard.db complete on its own: a
+ * backup that copies only the .db file, or a process killed with SIGKILL,
+ * loses nothing.
+ */
+function checkpoint(): void {
+  try {
+    holder.db?.pragma("wal_checkpoint(TRUNCATE)");
+  } catch {
+    // busy reader: SQLite will checkpoint later on its own
+  }
 }
 
 export function getTopEntries(limit = 100): LeaderboardEntry[] {

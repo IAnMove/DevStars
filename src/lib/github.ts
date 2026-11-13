@@ -117,6 +117,11 @@ query($username: String!, $repoCursor: String, $prCursor: String, $issueCursor: 
 
 const PAGINATION_QUERY = `
 query($username: String!, $repoCursor: String, $prCursor: String, $issueCursor: String) {
+  rateLimit {
+    remaining
+    limit
+    resetAt
+  }
   user(login: $username) {
     repositories(
       first: 100
@@ -255,7 +260,8 @@ export interface GitHubDataResult {
 // Limits
 // ============================================================
 
-const GITHUB_GRAPHQL_URL = "https://api.github.com/graphql";
+// Optional override (GitHub Enterprise, or a mock server in tests)
+const GITHUB_GRAPHQL_URL = process.env.GITHUB_GRAPHQL_URL || "https://api.github.com/graphql";
 
 // PRs / issues are paginated only until this many items have been collected
 const MAX_PRS_AND_ISSUES = 200;
@@ -264,10 +270,11 @@ const MAX_OWNED_REPOS = 300;
 // Hard stop for the pagination loop, whatever the cursors say
 const MAX_PAGINATION_CALLS = 4;
 
-// One GraphQL call may take this long...
-const CALL_TIMEOUT_MS = 12_000;
-// ...and the whole evaluation (first call + pagination) this long
-const TOTAL_DEADLINE_MS = 30_000;
+// One GraphQL call may take this long (GitHub itself gives up at ~10 s)...
+const CALL_TIMEOUT_MS = 15_000;
+// ...and the whole evaluation (first call + pagination) this long. Heavy
+// profiles need 3 calls of ~8 s each; Cloudflare cuts the request at 100 s.
+const TOTAL_DEADLINE_MS = 60_000;
 const RETRY_DELAY_MS = 400;
 
 // Stop calling GitHub when the token has fewer points than this left
@@ -525,6 +532,21 @@ async function graphqlOnce<T>(
       detail: "GraphQL RATE_LIMITED",
       retryAfterSec: state.quota ? secondsUntil(state.quota.resetAt) : 60,
     });
+  }
+
+  // The GraphQL rateLimit object and the HTTP headers do not always agree
+  // (seen: 4929 in the body, 4970 in the headers of the next call). Keep the
+  // lower figure so the reserve check errs on the safe side.
+  const bodyLimit = (payload.data as { rateLimit?: UserQueryResponse["rateLimit"] } | null)
+    ?.rateLimit;
+  if (bodyLimit && Number.isFinite(bodyLimit.remaining)) {
+    const resetAt = Date.parse(bodyLimit.resetAt);
+    const fromHeaders = state.quota;
+    state.quota = {
+      remaining: Math.min(bodyLimit.remaining, fromHeaders?.remaining ?? Infinity),
+      limit: bodyLimit.limit,
+      resetAt: Number.isFinite(resetAt) ? resetAt : (fromHeaders?.resetAt ?? Date.now() + 3600000),
+    };
   }
 
   const user = payload.data?.user;

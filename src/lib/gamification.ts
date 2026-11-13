@@ -1,4 +1,5 @@
 import type { Trend, CategoryScore, TitleInfo, NormalizedData, Archetype } from "@/lib/types";
+import { SITE_NAME, SITE_URL } from "@/lib/site";
 
 const TITLES: Array<{ max: number; key: string; title: string; description: string }> = [
   { max: 5, key: "helloWorldIntern", title: "Hello World Intern", description: "Just getting started. Everyone begins somewhere!" },
@@ -65,9 +66,9 @@ export function generateShareableSummary(
   const trendEmoji = getTrendEmoji(trend);
   const badgeLine = badges.length > 0 ? `Badges: ${badges.join(", ")}\n` : "";
 
-  return `\u{1F3C6} GitHub Dev Evaluator - @${username}
+  return `\u{1F3C6} ${SITE_NAME} - @${username}
 Score: ${overall}/100 - "${title}" ${trendEmoji}
-${badgeLine}Evaluate yours at: https://github.com/IAnMove/DevStars`;
+${badgeLine}${SITE_URL}/user/${username}`;
 }
 
 /**
