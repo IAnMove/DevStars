@@ -7,6 +7,9 @@ import { API_ERROR_CODES } from "@/lib/api-errors";
 import type { ApiErrorCode } from "@/lib/api-errors";
 import { calculateEvolution } from "@/lib/time-segmentation";
 import { useTranslation } from "@/lib/i18n";
+import { localeFor } from "@/lib/format";
+import { PageShell } from "@/components/PageShell";
+import { ProfileSkeleton } from "@/components/ProfileSkeleton";
 import { ProfileHeader } from "@/components/ProfileHeader";
 import { ScoreCircle } from "@/components/ScoreCircle";
 import { RadarChart } from "@/components/RadarChart";
@@ -14,15 +17,11 @@ import { CategoryCard } from "@/components/CategoryCard";
 import { EvolutionChart } from "@/components/EvolutionChart";
 import { TimePeriodSelector } from "@/components/TimePeriodSelector";
 import { ShareButton } from "@/components/ShareButton";
-import { LoadingProgress } from "@/components/LoadingProgress";
 import { RateLimitBadge } from "@/components/RateLimitBadge";
-import { LanguageSelector } from "@/components/LanguageSelector";
 import { LeaderboardButton } from "@/components/LeaderboardButton";
 import type { LeaderboardStanding } from "@/components/LeaderboardButton";
 import { ErrorScreen } from "@/components/ErrorScreen";
 import type { ScreenErrorCode } from "@/components/ErrorScreen";
-import { Nav } from "@/components/Nav";
-import { Footer } from "@/components/Footer";
 
 interface ApiResponse {
   data: NormalizedData;
@@ -34,6 +33,8 @@ interface LoadError {
   code: ScreenErrorCode;
   retryAfterSec?: number;
 }
+
+const CARD = "rounded-lg border border-gray-800 bg-gray-900";
 
 function toErrorCode(value: unknown, httpStatus: number): ApiErrorCode {
   if (typeof value === "string" && (API_ERROR_CODES as readonly string[]).includes(value)) {
@@ -103,7 +104,13 @@ export function UserProfile({
     };
   }, [username, attempt]);
 
-  if (loading) return <LoadingProgress />;
+  if (loading) {
+    return (
+      <PageShell>
+        <ProfileSkeleton username={username} />
+      </PageShell>
+    );
+  }
 
   if (error) {
     return (
@@ -116,21 +123,40 @@ export function UserProfile({
     );
   }
 
-  if (!data || !evolution) return null;
+  if (!data || !evolution) {
+    return <ErrorScreen code="internal" username={username} onRetry={() => setAttempt((n) => n + 1)} />;
+  }
 
   const currentBreakdown = evolution.periods[selectedPeriod];
-  const locale = language === "es" ? "es-ES" : "en-US";
-  const formatDate = (iso: string) =>
-    new Date(iso).toLocaleDateString(locale, { year: "numeric", month: "short", day: "numeric" });
+  const allTimeScore = evolution.periods.all.overall;
+  const periodName = t(`period.${selectedPeriod}`);
+  const translatedTitle = t(`title.${currentBreakdown.title.i18nKey}`);
+  const dateFormat = new Intl.DateTimeFormat(localeFor(language), {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+  const formatDate = (iso: string) => {
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime()) ? iso : dateFormat.format(date);
+  };
+
+  let periodNote: string;
+  if (standing) {
+    periodNote = t("leaderboard.rankNote", {
+      rank: standing.rank,
+      score: standing.score,
+      title: standing.title,
+      date: formatDate(standing.evaluatedAt),
+    });
+  } else if (selectedPeriod === "all") {
+    periodNote = t("profile.periodNote.all");
+  } else {
+    periodNote = t("profile.periodNote.other", { period: periodName, score: allTimeScore });
+  }
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-8">
-      {/* Nav */}
-      <div className="mb-6 flex items-center justify-between">
-        <Nav />
-        <LanguageSelector />
-      </div>
-
+    <PageShell>
       {staleSince && (
         <p
           role="status"
@@ -148,50 +174,49 @@ export function UserProfile({
           <ShareButton
             username={data.profile.login}
             overall={currentBreakdown.overall}
-            title={currentBreakdown.title.title}
-            badges={currentBreakdown.badges}
-            trend={evolution.trend}
+            title={translatedTitle}
+            period={selectedPeriod}
           />
           <Link
             href="/"
-            className="rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-sm text-gray-300 hover:border-gray-500"
+            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-gray-700 bg-gray-900 px-4 text-sm text-gray-200 transition hover:border-purple-500 hover:text-white"
           >
             {t("results.newSearch")}
           </Link>
         </div>
       </div>
 
-      {/* Time Period Selector */}
+      {/* Period selector + which period the leaderboard uses */}
       <div className="mb-6">
         <TimePeriodSelector selected={selectedPeriod} onChange={setSelectedPeriod} />
-        {/* Which period and date the leaderboard score refers to */}
-        {standing && (
-          <p className="mt-3 text-sm text-gray-400">
-            {t("leaderboard.rankNote", {
-              rank: standing.rank,
-              score: standing.score,
-              title: standing.title,
-              date: formatDate(standing.evaluatedAt),
-            })}{" "}
-            {selectedPeriod !== "all" && (
-              <button
-                onClick={() => setSelectedPeriod("all")}
-                className="font-medium text-purple-300 underline underline-offset-2 hover:text-purple-200"
-              >
-                {t("leaderboard.rankNote.show")}
-              </button>
-            )}
-          </p>
-        )}
+        <div className="mt-3 rounded-lg border border-purple-900 bg-purple-950/40 px-3 py-2 text-sm text-gray-200">
+          <p>{periodNote}</p>
+          {selectedPeriod !== "all" && (
+            <button
+              type="button"
+              onClick={() => setSelectedPeriod("all")}
+              className="inline-flex min-h-11 items-center rounded-md font-medium text-purple-300 underline underline-offset-2 transition hover:text-purple-200"
+            >
+              {t("leaderboard.rankNote.show")}
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Overall Score + Radar */}
+      {/* Overall score + radar */}
       <div className="mb-6 grid gap-6 sm:grid-cols-2">
-        <div className="flex items-center justify-center rounded-lg border border-gray-800 bg-gray-900 p-6">
+        <section
+          aria-labelledby="overall-score-heading"
+          className={`${CARD} flex items-center justify-center p-6`}
+        >
+          <h2 id="overall-score-heading" className="sr-only">
+            {t("results.overallScore")}
+          </h2>
           <ScoreCircle
             score={currentBreakdown.overall}
-            title={currentBreakdown.title.title}
+            title={translatedTitle}
             description={t(`title.${currentBreakdown.title.i18nKey}.desc`)}
+            periodLabel={t("results.scorePeriod", { period: periodName })}
             archetype={
               currentBreakdown.archetype
                 ? {
@@ -202,53 +227,55 @@ export function UserProfile({
                 : undefined
             }
           />
-        </div>
-        <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
-          <h3 className="mb-2 font-semibold text-white">{t("results.categoryOverview")}</h3>
+        </section>
+        <section className={`${CARD} min-w-0 p-4`}>
+          <h2 className="mb-2 font-semibold text-white">{t("results.categoryOverview")}</h2>
           <RadarChart categories={currentBreakdown.categories} />
-        </div>
+        </section>
       </div>
 
       {/* Badges */}
       {currentBreakdown.badges.length > 0 && (
-        <div className="mb-6 flex flex-wrap gap-2">
-          {currentBreakdown.badges.map((badge) => (
-            <span
-              key={badge}
-              className="rounded-full bg-purple-900/50 px-3 py-1 text-sm font-medium text-purple-300"
-            >
-              {badge}
-            </span>
-          ))}
-        </div>
+        <section className="mb-6">
+          <h2 className="sr-only">{t("results.badges")}</h2>
+          <ul className="flex flex-wrap gap-2">
+            {currentBreakdown.badges.map((badge) => (
+              <li
+                key={badge}
+                className="rounded-full bg-purple-900/50 px-3 py-1 text-sm font-medium text-purple-200"
+              >
+                {badge}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
-      {/* Category Cards */}
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {currentBreakdown.categories.map((cat) => (
-          <CategoryCard key={cat.key} category={cat} />
-        ))}
-      </div>
+      {/* Category cards */}
+      <section className="mb-6">
+        <h2 className="sr-only">{t("results.categories")}</h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {currentBreakdown.categories.map((cat) => (
+            <CategoryCard key={cat.key} category={cat} />
+          ))}
+        </div>
+      </section>
 
-      {/* Evolution Chart */}
-      <div className="mb-6 rounded-lg border border-gray-800 bg-gray-900 p-4">
+      {/* Evolution chart */}
+      <section className={`${CARD} mb-6 min-w-0 p-4`}>
         <EvolutionChart periods={evolution.periods} trend={evolution.trend} />
-      </div>
+      </section>
 
       {/* Disclaimer */}
-      <p className="mb-4 text-center text-xs text-gray-600">
-        {t("results.disclaimer")}
-      </p>
+      <p className="mb-4 text-center text-xs text-gray-400">{t("results.disclaimer")}</p>
 
-      {/* Rate Limit */}
+      {/* Rate limit */}
       {rateLimit && (
         <div className="flex justify-center">
           <RateLimitBadge rateLimit={rateLimit} />
         </div>
       )}
-
-      <Footer />
-    </main>
+    </PageShell>
   );
 }
 

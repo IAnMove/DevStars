@@ -26,6 +26,9 @@ interface StatusBody {
 
 const POLL_INTERVAL_MS = 3000;
 
+const BASE =
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-medium";
+
 export function LeaderboardButton({
   username,
   onStanding,
@@ -37,6 +40,7 @@ export function LeaderboardButton({
   const { t } = useTranslation();
   const [status, setStatus] = useState<ButtonStatus>("idle");
   const [position, setPosition] = useState<number | null>(null);
+  const [rank, setRank] = useState<number | null>(null);
   const [canRefresh, setCanRefresh] = useState(false);
 
   // Asks the server where this user stands. `afterSave` = we are waiting for
@@ -49,6 +53,7 @@ export function LeaderboardButton({
       const standing = body.inLeaderboard && body.entry ? body.entry : null;
       onStanding?.(standing);
       setCanRefresh(Boolean(standing?.canRefresh));
+      setRank(standing?.rank ?? null);
       setPosition(body.position ?? null);
 
       let next: ButtonStatus;
@@ -112,32 +117,37 @@ export function LeaderboardButton({
     return (
       <Link
         href="/leaderboard"
-        className="rounded-lg border border-green-700 bg-green-900/30 px-4 py-2 text-sm font-medium text-green-300 transition hover:bg-green-900/50"
+        className={`${BASE} border-green-700 bg-green-900/30 text-green-300 transition hover:bg-green-900/50`}
       >
-        {t("leaderboard.saved")}
+        {rank ? t("leaderboard.savedRank", { rank }) : t("leaderboard.saved")}
       </Link>
     );
   }
 
   if (status === "queued" || status === "processing") {
     return (
-      <button
-        disabled
-        className="flex items-center gap-2 rounded-lg border border-yellow-700 bg-yellow-900/30 px-4 py-2 text-sm font-medium text-yellow-300"
+      <div
+        role="status"
+        aria-live="polite"
+        className={`${BASE} border-yellow-700 bg-yellow-900/30 text-yellow-200`}
       >
-        <span className="h-3 w-3 animate-spin rounded-full border-2 border-yellow-500 border-t-transparent" />
+        <span
+          aria-hidden="true"
+          className="h-3 w-3 animate-spin rounded-full border-2 border-yellow-500 border-t-transparent motion-reduce:animate-none"
+        />
         {status === "queued"
           ? `${t("leaderboard.queued")}${position ? ` #${position}` : ""}`
           : t("leaderboard.processing")}
-      </button>
+      </div>
     );
   }
 
   if (status === "error") {
     return (
       <button
+        type="button"
         onClick={handleSave}
-        className="rounded-lg border border-red-700 bg-red-900/30 px-4 py-2 text-sm font-medium text-red-300 transition hover:bg-red-900/50"
+        className={`${BASE} border-red-700 bg-red-900/30 text-red-300 transition hover:bg-red-900/50`}
       >
         {t("leaderboard.error")}
       </button>
@@ -146,8 +156,9 @@ export function LeaderboardButton({
 
   return (
     <button
+      type="button"
       onClick={handleSave}
-      className="rounded-lg border border-purple-700 bg-purple-900/30 px-4 py-2 text-sm font-medium text-purple-300 transition hover:border-purple-500 hover:bg-purple-900/50 active:scale-95"
+      className={`${BASE} border-purple-700 bg-purple-900/30 text-purple-200 transition hover:border-purple-500 hover:bg-purple-900/50`}
     >
       {canRefresh ? t("leaderboard.update") : t("leaderboard.save")}
     </button>

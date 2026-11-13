@@ -1,30 +1,41 @@
 "use client";
 
-import { useTranslation, Language } from "@/lib/i18n";
+import { useTranslation } from "@/lib/i18n";
+import type { Language } from "@/lib/i18n";
 
-const LANGUAGES: { code: Language; label: string }[] = [
-  { code: "en", label: "EN" },
-  { code: "es", label: "ES" },
+// `name` is the autonym of each language (never translated)
+const LANGUAGES: { code: Language; label: string; name: string }[] = [
+  { code: "en", label: "EN", name: "English" },
+  { code: "es", label: "ES", name: "Español" },
 ];
 
 export function LanguageSelector() {
-  const { language, setLanguage } = useTranslation();
+  const { language, setLanguage, t } = useTranslation();
 
   return (
-    <div className="inline-flex rounded-lg border border-gray-700 bg-gray-900 p-0.5">
-      {LANGUAGES.map((lang) => (
-        <button
-          key={lang.code}
-          onClick={() => setLanguage(lang.code)}
-          className={`rounded-md px-2 py-1 text-xs font-medium transition ${
-            language === lang.code
-              ? "bg-purple-600 text-white"
-              : "text-gray-400 hover:text-white"
-          }`}
-        >
-          {lang.label}
-        </button>
-      ))}
+    <div
+      role="group"
+      aria-label={t("language.label")}
+      className="inline-flex rounded-lg border border-gray-700 bg-gray-900 p-0.5"
+    >
+      {LANGUAGES.map((lang) => {
+        const active = language === lang.code;
+        return (
+          <button
+            key={lang.code}
+            type="button"
+            lang={lang.code}
+            aria-pressed={active}
+            onClick={() => setLanguage(lang.code)}
+            className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-md px-2 text-xs font-semibold transition ${
+              active ? "bg-purple-700 text-white" : "text-gray-300 hover:text-white"
+            }`}
+          >
+            <span aria-hidden="true">{lang.label}</span>
+            <span className="sr-only">{lang.name}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

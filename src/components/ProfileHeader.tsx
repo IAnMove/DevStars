@@ -1,6 +1,9 @@
 "use client";
 
 import { useTranslation } from "@/lib/i18n";
+import { localeFor, sizedAvatarUrl } from "@/lib/format";
+
+const AVATAR_CSS_SIZE = 64;
 
 export function ProfileHeader({
   profile,
@@ -13,28 +16,47 @@ export function ProfileHeader({
     createdAt: Date | string;
   };
 }) {
-  const { t } = useTranslation();
-  const memberSince = new Date(profile.createdAt).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-  });
+  const { t, language } = useTranslation();
+  const created = new Date(profile.createdAt);
+  const hasDate = !Number.isNaN(created.getTime());
+  const memberSince = hasDate
+    ? new Intl.DateTimeFormat(localeFor(language), { year: "numeric", month: "long" }).format(created)
+    : null;
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex min-w-0 items-start gap-4">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={profile.avatarUrl}
-        alt={profile.login}
-        className="h-16 w-16 rounded-full border-2 border-gray-700"
+        src={sizedAvatarUrl(profile.avatarUrl, AVATAR_CSS_SIZE * 2)}
+        alt={t("profile.avatarAlt", { username: profile.login })}
+        width={AVATAR_CSS_SIZE}
+        height={AVATAR_CSS_SIZE}
+        decoding="async"
+        className="h-16 w-16 shrink-0 rounded-full border-2 border-gray-700 bg-gray-800"
       />
-      <div>
-        <h2 className="text-xl font-bold text-white">
+      <div className="min-w-0">
+        <h1 className="break-words text-xl font-bold text-white sm:text-2xl">
           {profile.name || profile.login}
-        </h2>
-        <p className="text-sm text-gray-400">@{profile.login}</p>
-        {profile.bio && (
-          <p className="mt-1 text-sm text-gray-300">{profile.bio}</p>
+        </h1>
+        <a
+          href={`https://github.com/${encodeURIComponent(profile.login)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex min-h-11 items-center gap-2 rounded-md text-sm text-purple-300 underline underline-offset-2 transition hover:text-purple-200"
+        >
+          <span>@{profile.login}</span>
+          <span aria-hidden="true" className="text-xs">
+            GitHub ↗
+          </span>
+          <span className="sr-only">{t("profile.githubLink")}</span>
+        </a>
+        {profile.bio && <p className="break-words text-sm text-gray-300">{profile.bio}</p>}
+        {memberSince && (
+          <p className="mt-1 text-xs text-gray-400">
+            {t("results.memberSince")}{" "}
+            <time dateTime={created.toISOString()}>{memberSince}</time>
+          </p>
         )}
-        <p className="mt-1 text-xs text-gray-500">{t("results.memberSince")} {memberSince}</p>
       </div>
     </div>
   );
