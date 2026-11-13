@@ -97,49 +97,49 @@ export function getArchetype(data: NormalizedData, categories: CategoryScore[]):
     {
       key: "archetype.reviewer",
       icon: "\u{1F50D}",
-      score: 60 * reviewRatio + 20 * (reviews > 20 ? 1 : 0) + 20 * (catScore("seniority") > 50 ? 1 : 0),
+      score: 60 * reviewRatio + (reviews > 20 ? 20 : 0) + (catScore("seniority") > 50 ? 20 : 0),
     },
     {
       key: "archetype.contributor",
       icon: "\u{1F91D}",
-      score: 50 * (prs > 0 ? externalPRs / prs : 0) + 25 * (externalPRs > 10 ? 1 : 0) + 25 * (externalIssues > 5 ? 1 : 0),
+      score: 50 * (prs > 0 ? externalPRs / prs : 0) + (externalPRs > 10 ? 25 : 0) + (externalIssues > 5 ? 25 : 0),
     },
     {
       key: "archetype.builder",
       icon: "\u{1F3D7}\u{FE0F}",
-      score: 40 * commitRatio + 30 * (commits > 200 ? 1 : 0) + 30 * (catScore("productividad") > 60 ? 1 : 0),
+      score: 40 * commitRatio + (commits > 200 ? 30 : 0) + (catScore("productividad") > 60 ? 30 : 0),
     },
     {
       key: "archetype.mergeMaster",
       icon: "\u{1F510}",
-      score: 30 * (prs > 0 ? mergedPRs / prs : 0) + 40 * reviewRatio + 30 * (reviews > 10 && mergedPRs > 10 ? 1 : 0),
+      score: 30 * (prs > 0 ? mergedPRs / prs : 0) + 40 * reviewRatio + (reviews > 10 && mergedPRs > 10 ? 30 : 0),
     },
     {
       key: "archetype.bugHunter",
       icon: "\u{1F41B}",
-      score: 50 * issueRatio + 30 * (issues > 20 ? 1 : 0) + 20 * (externalIssues > 5 ? 1 : 0),
+      score: 50 * issueRatio + (issues > 20 ? 30 : 0) + (externalIssues > 5 ? 20 : 0),
     },
     {
       key: "archetype.polyglot",
       icon: "\u{1F310}",
-      score: 60 * Math.min(languageCount / 6, 1) + 40 * (catScore("diversidad") > 70 ? 1 : 0),
+      score: 60 * Math.min(languageCount / 6, 1) + (catScore("diversidad") > 70 ? 40 : 0),
     },
     {
       key: "archetype.mentor",
       icon: "\u{1F9D1}\u{200D}\u{1F3EB}",
       score:
-        30 * (reviews > 15 ? 1 : 0) +
-        35 * (catScore("seniority") > 60 ? 1 : 0) +
-        35 * (catScore("consistencia") > 50 ? 1 : 0),
+        (reviews > 15 ? 30 : 0) +
+        (catScore("seniority") > 60 ? 35 : 0) +
+        (catScore("consistencia") > 50 ? 35 : 0),
     },
     {
       key: "archetype.teamPlayer",
       icon: "\u{1F465}",
       score:
-        25 * (prRatio > 0.1 && prRatio < 0.5 ? 1 : 0) +
-        25 * (reviewRatio > 0.05 ? 1 : 0) +
-        25 * (issueRatio > 0.02 ? 1 : 0) +
-        25 * (commitRatio > 0.1 && commitRatio < 0.8 ? 1 : 0),
+        (prRatio > 0.1 && prRatio < 0.5 ? 25 : 0) +
+        (reviewRatio > 0.05 ? 25 : 0) +
+        (issueRatio > 0.02 ? 25 : 0) +
+        (commitRatio > 0.1 && commitRatio < 0.8 ? 25 : 0),
     },
   ];
 

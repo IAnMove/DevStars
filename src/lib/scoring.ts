@@ -139,17 +139,30 @@ function getMonthlyActivity(data: NormalizedData): {
   monthlyRatio: number;
 } {
   const months = new Set<string>();
-  const monthKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}`;
 
   for (const repo of data.repos) {
-    months.add(monthKey(new Date(repo.pushedAt)));
-    months.add(monthKey(new Date(repo.createdAt)));
+    const pushed = new Date(repo.pushedAt);
+    const created = new Date(repo.createdAt);
+    months.add(`${pushed.getFullYear()}-${pushed.getMonth()}`);
+    months.add(`${created.getFullYear()}-${created.getMonth()}`);
   }
-  for (const pr of data.pullRequests) months.add(monthKey(new Date(pr.createdAt)));
-  for (const issue of data.issues) months.add(monthKey(new Date(issue.createdAt)));
-  for (const review of data.reviews) months.add(monthKey(new Date(review.createdAt)));
+  for (const pr of data.pullRequests) {
+    const d = new Date(pr.createdAt);
+    months.add(`${d.getFullYear()}-${d.getMonth()}`);
+  }
+  for (const issue of data.issues) {
+    const d = new Date(issue.createdAt);
+    months.add(`${d.getFullYear()}-${d.getMonth()}`);
+  }
+  for (const review of data.reviews) {
+    const d = new Date(review.createdAt);
+    months.add(`${d.getFullYear()}-${d.getMonth()}`);
+  }
   for (const week of data.commits.weeklyData) {
-    if (week.count > 0) months.add(monthKey(new Date(week.week)));
+    if (week.count > 0) {
+      const d = new Date(week.week);
+      months.add(`${d.getFullYear()}-${d.getMonth()}`);
+    }
   }
 
   const activeMonths = months.size;
