@@ -6,11 +6,13 @@ export function ScoreCircle({
   score,
   title,
   description,
+  archetype,
   size = "lg",
 }: {
   score: number;
   title: string;
   description?: string;
+  archetype?: { icon: string; name: string; desc: string };
   size?: "lg" | "sm";
 }) {
   const colorClass = getScoreColor(score);
@@ -55,6 +57,14 @@ export function ScoreCircle({
           <p className="text-lg font-semibold text-purple-300">{title}</p>
           {description && (
             <p className="mt-1 text-sm text-gray-400">{description}</p>
+          )}
+          {archetype && (
+            <div className="mt-3 rounded-lg border border-gray-700 bg-gray-800/50 px-3 py-2">
+              <p className="text-sm font-medium text-white">
+                {archetype.icon} {archetype.name}
+              </p>
+              <p className="mt-0.5 text-xs text-gray-400">{archetype.desc}</p>
+            </div>
           )}
         </div>
       )}

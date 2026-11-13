@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "@/lib/i18n";
 import { LanguageSelector } from "@/components/LanguageSelector";
+import { Nav } from "@/components/Nav";
+import { Footer } from "@/components/Footer";
 
 export default function Home() {
   const [username, setUsername] = useState("");
@@ -28,6 +30,9 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center px-4">
+      <div className="absolute left-4 top-4">
+        <Nav />
+      </div>
       <div className="absolute right-4 top-4">
         <LanguageSelector />
       </div>
@@ -71,6 +76,10 @@ export default function Home() {
         <p className="mt-12 text-xs text-gray-600">
           {t("app.disclaimer")}
         </p>
+      </div>
+
+      <div className="absolute bottom-0 left-0 right-0">
+        <Footer />
       </div>
     </main>
   );

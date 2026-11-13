@@ -15,6 +15,9 @@ import { ShareButton } from "@/components/ShareButton";
 import { LoadingProgress } from "@/components/LoadingProgress";
 import { RateLimitBadge } from "@/components/RateLimitBadge";
 import { LanguageSelector } from "@/components/LanguageSelector";
+import { LeaderboardButton } from "@/components/LeaderboardButton";
+import { Nav } from "@/components/Nav";
+import { Footer } from "@/components/Footer";
 
 interface ApiResponse {
   data: NormalizedData;
@@ -85,11 +88,17 @@ export default function UserPage() {
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
+      {/* Nav */}
+      <div className="mb-6 flex items-center justify-between">
+        <Nav />
+        <LanguageSelector />
+      </div>
+
       {/* Header */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <ProfileHeader profile={data.profile} />
-        <div className="flex items-center gap-2">
-          <LanguageSelector />
+        <div className="flex flex-wrap items-center gap-2">
+          <LeaderboardButton username={data.profile.login} />
           <ShareButton
             username={data.profile.login}
             overall={currentBreakdown.overall}
@@ -117,7 +126,16 @@ export default function UserPage() {
           <ScoreCircle
             score={currentBreakdown.overall}
             title={currentBreakdown.title.title}
-            description={currentBreakdown.title.description}
+            description={t(`title.${currentBreakdown.title.i18nKey}.desc`)}
+            archetype={
+              currentBreakdown.archetype
+                ? {
+                    icon: currentBreakdown.archetype.icon,
+                    name: t(currentBreakdown.archetype.key),
+                    desc: t(`${currentBreakdown.archetype.key}.desc`),
+                  }
+                : undefined
+            }
           />
         </div>
         <div className="rounded-lg border border-gray-800 bg-gray-900 p-4">
@@ -163,6 +181,8 @@ export default function UserPage() {
           <RateLimitBadge rateLimit={rateLimit} />
         </div>
       )}
+
+      <Footer />
     </main>
   );
 }

@@ -1,23 +1,34 @@
-import type { Trend, CategoryScore, TitleInfo } from "@/lib/types";
+import type { Trend, CategoryScore, TitleInfo, NormalizedData, Archetype } from "@/lib/types";
 
-const TITLES: Array<{ max: number; title: string; description: string }> = [
-  { max: 10, title: "Hello World Intern", description: "Just getting started. Everyone begins somewhere!" },
-  { max: 20, title: "Code Padawan", description: "Learning the ways of the code. Building first projects." },
-  { max: 30, title: "Bug Whisperer", description: "Starting to understand codebases and fix things." },
-  { max: 40, title: "Commit Cadet", description: "Regular contributor with growing habits." },
-  { max: 50, title: "Merge Request Warrior", description: "Solid contributor who collaborates through PRs." },
-  { max: 60, title: "Bug Slayer", description: "Experienced developer with consistent output." },
-  { max: 70, title: "Pipeline Ninja", description: "Highly active across multiple projects and languages." },
-  { max: 80, title: "Code Sensei", description: "Veteran developer with strong habits and broad impact." },
-  { max: 90, title: "Open Source Titan", description: "Top-tier contributor driving open source forward." },
-  { max: 100, title: "Git Overlord", description: "Elite developer. Exceptional across all dimensions." },
+const TITLES: Array<{ max: number; key: string; title: string; description: string }> = [
+  { max: 5, key: "helloWorldIntern", title: "Hello World Intern", description: "Just getting started. Everyone begins somewhere!" },
+  { max: 10, key: "syntaxSeedling", title: "Syntax Seedling", description: "Planted the first seed. Learning to write code that runs." },
+  { max: 15, key: "codePadawan", title: "Code Padawan", description: "Learning the ways of the code. Building first projects." },
+  { max: 20, key: "bugWhisperer", title: "Bug Whisperer", description: "Starting to understand codebases and fix things." },
+  { max: 25, key: "commitCadet", title: "Commit Cadet", description: "Regular contributor with growing habits." },
+  { max: 30, key: "scriptArtisan", title: "Script Artisan", description: "Crafting scripts and tools. Getting comfortable with the craft." },
+  { max: 35, key: "repoArchitect", title: "Repo Architect", description: "Building structured projects. Thinking about code organization." },
+  { max: 40, key: "mergeRequestWarrior", title: "Merge Request Warrior", description: "Solid contributor who collaborates through PRs." },
+  { max: 45, key: "debugDetective", title: "Debug Detective", description: "Tracks down bugs methodically. Problem solver in the making." },
+  { max: 50, key: "bugSlayer", title: "Bug Slayer", description: "Experienced developer with consistent output." },
+  { max: 55, key: "pipelineNinja", title: "Pipeline Ninja", description: "Highly active across multiple projects and languages." },
+  { max: 60, key: "stackVoyager", title: "Stack Voyager", description: "Explores different technologies and stacks with confidence." },
+  { max: 65, key: "codeAlchemist", title: "Code Alchemist", description: "Transforms ideas into working code. Versatile and productive." },
+  { max: 70, key: "prGladiator", title: "PR Gladiator", description: "Battles through code reviews. Strong collaborator and reviewer." },
+  { max: 75, key: "codeSensei", title: "Code Sensei", description: "Veteran developer with strong habits and broad impact." },
+  { max: 80, key: "openSourceGuardian", title: "Open Source Guardian", description: "Protects and nurtures open source projects. Trusted maintainer." },
+  { max: 85, key: "binarySage", title: "Binary Sage", description: "Deep knowledge and years of sustained contribution." },
+  { max: 90, key: "openSourceTitan", title: "Open Source Titan", description: "Top-tier contributor driving open source forward." },
+  { max: 95, key: "massDeployer", title: "Mass Deployer", description: "Ships at massive scale. Relentless force of engineering." },
+  { max: 100, key: "gitOverlord", title: "Git Overlord", description: "Elite developer. Exceptional across all dimensions." },
 ];
 
 export function getTitle(score: number): TitleInfo {
   for (const t of TITLES) {
-    if (score <= t.max) return { title: t.title, description: t.description };
+    if (score <= t.max) return { title: t.title, description: t.description, i18nKey: t.key };
   }
-  return { title: TITLES[TITLES.length - 1].title, description: TITLES[TITLES.length - 1].description };
+  const last = TITLES[TITLES.length - 1];
+  return { title: last.title, description: last.description, i18nKey: last.key };
 }
 
 export function getCategoryBadges(categories: CategoryScore[]): string[] {
@@ -56,7 +67,84 @@ export function generateShareableSummary(
 
   return `\u{1F3C6} GitHub Dev Evaluator - @${username}
 Score: ${overall}/100 - "${title}" ${trendEmoji}
-${badgeLine}Evaluate yours at: [URL placeholder]`;
+${badgeLine}Evaluate yours at: https://github.com/IAnMove/DevStars`;
+}
+
+/**
+ * Picks the developer "archetype" that best matches the shape of the activity
+ * (reviews vs. PRs vs. issues vs. commits). Each candidate gets a 0-100 affinity
+ * score (ratios plus fixed bonuses when a threshold holds) and the highest wins.
+ */
+export function getArchetype(data: NormalizedData, categories: CategoryScore[]): Archetype {
+  const commits = data.commits.total;
+  const prs = data.pullRequests.length;
+  const reviews = data.reviews.length;
+  const issues = data.issues.length;
+  const externalPRs = data.pullRequests.filter((pr) => pr.isExternal).length;
+  const externalIssues = data.issues.filter((i) => i.isExternal).length;
+  const mergedPRs = data.pullRequests.filter((pr) => pr.state === "merged").length;
+  const languageCount = new Set(data.repos.flatMap((r) => r.languages ?? [])).size;
+
+  const totalActivity = commits + prs + reviews + issues;
+  const catScore = (key: string) => categories.find((c) => c.key === key)?.score ?? 0;
+
+  const reviewRatio = totalActivity > 0 ? reviews / totalActivity : 0;
+  const prRatio = totalActivity > 0 ? prs / totalActivity : 0;
+  const issueRatio = totalActivity > 0 ? issues / totalActivity : 0;
+  const commitRatio = totalActivity > 0 ? commits / totalActivity : 0;
+
+  const candidates: Array<Archetype & { score: number }> = [
+    {
+      key: "archetype.reviewer",
+      icon: "\u{1F50D}",
+      score: 60 * reviewRatio + 20 * (reviews > 20 ? 1 : 0) + 20 * (catScore("seniority") > 50 ? 1 : 0),
+    },
+    {
+      key: "archetype.contributor",
+      icon: "\u{1F91D}",
+      score: 50 * (prs > 0 ? externalPRs / prs : 0) + 25 * (externalPRs > 10 ? 1 : 0) + 25 * (externalIssues > 5 ? 1 : 0),
+    },
+    {
+      key: "archetype.builder",
+      icon: "\u{1F3D7}\u{FE0F}",
+      score: 40 * commitRatio + 30 * (commits > 200 ? 1 : 0) + 30 * (catScore("productividad") > 60 ? 1 : 0),
+    },
+    {
+      key: "archetype.mergeMaster",
+      icon: "\u{1F510}",
+      score: 30 * (prs > 0 ? mergedPRs / prs : 0) + 40 * reviewRatio + 30 * (reviews > 10 && mergedPRs > 10 ? 1 : 0),
+    },
+    {
+      key: "archetype.bugHunter",
+      icon: "\u{1F41B}",
+      score: 50 * issueRatio + 30 * (issues > 20 ? 1 : 0) + 20 * (externalIssues > 5 ? 1 : 0),
+    },
+    {
+      key: "archetype.polyglot",
+      icon: "\u{1F310}",
+      score: 60 * Math.min(languageCount / 6, 1) + 40 * (catScore("diversidad") > 70 ? 1 : 0),
+    },
+    {
+      key: "archetype.mentor",
+      icon: "\u{1F9D1}\u{200D}\u{1F3EB}",
+      score:
+        30 * (reviews > 15 ? 1 : 0) +
+        35 * (catScore("seniority") > 60 ? 1 : 0) +
+        35 * (catScore("consistencia") > 50 ? 1 : 0),
+    },
+    {
+      key: "archetype.teamPlayer",
+      icon: "\u{1F465}",
+      score:
+        25 * (prRatio > 0.1 && prRatio < 0.5 ? 1 : 0) +
+        25 * (reviewRatio > 0.05 ? 1 : 0) +
+        25 * (issueRatio > 0.02 ? 1 : 0) +
+        25 * (commitRatio > 0.1 && commitRatio < 0.8 ? 1 : 0),
+    },
+  ];
+
+  candidates.sort((a, b) => b.score - a.score);
+  return { key: candidates[0].key, icon: candidates[0].icon };
 }
 
 export function getScoreColor(score: number): string {

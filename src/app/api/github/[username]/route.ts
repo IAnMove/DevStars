@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchAllGitHubData } from "@/lib/github";
+import { fetchGitHubDataCached } from "@/lib/github";
 
 export async function GET(
   request: NextRequest,
@@ -16,7 +16,7 @@ export async function GET(
 
   try {
     const token = process.env.GITHUB_TOKEN || undefined;
-    const result = await fetchAllGitHubData(username, token);
+    const result = await fetchGitHubDataCached(username, token);
     return NextResponse.json(result);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";

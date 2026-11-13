@@ -70,6 +70,8 @@ export interface NormalizedData {
     name: string;
     description: string | null;
     language: string | null;
+    languages?: string[];
+    languageBytes?: Record<string, number>;
     stars: number;
     forks: number;
     createdAt: Date;
@@ -117,6 +119,12 @@ export interface CategoryScore {
 export interface TitleInfo {
   title: string;
   description: string;
+  i18nKey: string;
+}
+
+export interface Archetype {
+  key: string;
+  icon: string;
 }
 
 export interface ScoreBreakdown {
@@ -124,6 +132,7 @@ export interface ScoreBreakdown {
   categories: CategoryScore[];
   title: TitleInfo;
   badges: string[];
+  archetype: Archetype;
   trend: Trend;
 }
 
