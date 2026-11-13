@@ -43,13 +43,17 @@ export function LeaderboardButton({
   const [rank, setRank] = useState<number | null>(null);
   const [canRefresh, setCanRefresh] = useState(false);
 
-  // Asks the server where this user stands. `afterSave` = we are waiting for
+  // Network only: asks the server where this user stands.
+  const fetchStatus = useCallback(async (): Promise<StatusBody> => {
+    const res = await fetch(`/api/leaderboard/status/${encodeURIComponent(username)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return (await res.json()) as StatusBody;
+  }, [username]);
+
+  // Applies a server response to local state. `afterSave` = we are waiting for
   // an evaluation we queued, so "done" means "saved" even without details.
-  const checkStatus = useCallback(
-    async (afterSave: boolean): Promise<ButtonStatus> => {
-      const res = await fetch(`/api/leaderboard/status/${encodeURIComponent(username)}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const body: StatusBody = await res.json();
+  const applyStatus = useCallback(
+    (body: StatusBody, afterSave: boolean): ButtonStatus => {
       const standing = body.inLeaderboard && body.entry ? body.entry : null;
       onStanding?.(standing);
       setCanRefresh(Boolean(standing?.canRefresh));
@@ -66,13 +70,27 @@ export function LeaderboardButton({
       setStatus(next);
       return next;
     },
-    [username, onStanding]
+    [onStanding]
+  );
+
+  const checkStatus = useCallback(
+    async (afterSave: boolean): Promise<ButtonStatus> =>
+      applyStatus(await fetchStatus(), afterSave),
+    [fetchStatus, applyStatus]
   );
 
   // On mount: is the user already on the leaderboard (or being evaluated)?
   useEffect(() => {
-    checkStatus(false).catch(() => {});
-  }, [checkStatus]);
+    let cancelled = false;
+    fetchStatus()
+      .then((body) => {
+        if (!cancelled) applyStatus(body, false);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchStatus, applyStatus]);
 
   // While queued/processing, poll the server until it finishes
   useEffect(() => {

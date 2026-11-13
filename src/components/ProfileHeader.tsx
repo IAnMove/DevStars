@@ -25,7 +25,7 @@ export function ProfileHeader({
 
   return (
     <div className="flex min-w-0 items-start gap-4">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
+      { }
       <img
         src={sizedAvatarUrl(profile.avatarUrl, AVATAR_CSS_SIZE * 2)}
         alt={t("profile.avatarAlt", { username: profile.login })}

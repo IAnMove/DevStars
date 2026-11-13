@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useEffect, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import en from "./en.json";
 import es from "./es.json";
@@ -8,6 +8,9 @@ import es from "./es.json";
 export type Language = "en" | "es";
 
 const dictionaries: Record<Language, Record<string, string>> = { en, es };
+
+const DEFAULT_LANGUAGE: Language = "en";
+const STORAGE_KEY = "language";
 
 export type TranslationVars = Record<string, string | number>;
 
@@ -25,8 +28,53 @@ function interpolate(text: string, vars?: TranslationVars): string {
   );
 }
 
+function isLanguage(value: string | null): value is Language {
+  return value !== null && Object.prototype.hasOwnProperty.call(dictionaries, value);
+}
+
+// --- Tiny external store over localStorage -------------------------------
+
+const listeners = new Set<() => void>();
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  // Also react to language changes made in other tabs
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === STORAGE_KEY || event.key === null) listener();
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    listeners.delete(listener);
+    window.removeEventListener("storage", onStorage);
+  };
+}
+
+function getSnapshot(): Language {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return isLanguage(stored) ? stored : DEFAULT_LANGUAGE;
+  } catch {
+    return DEFAULT_LANGUAGE;
+  }
+}
+
+function getServerSnapshot(): Language {
+  return DEFAULT_LANGUAGE;
+}
+
+function writeLanguage(lang: Language) {
+  try {
+    localStorage.setItem(STORAGE_KEY, lang);
+  } catch {
+    // storage unavailable (private mode, quota): ignore
+  }
+  listeners.forEach((listener) => listener());
+}
+
+// -------------------------------------------------------------------------
+
 const I18nContext = createContext<I18nContextType>({
-  language: "en",
+  language: DEFAULT_LANGUAGE,
   setLanguage: () => {},
   t: (key, vars) => interpolate(dictionaries.en[key] || key, vars),
 });
@@ -34,12 +82,7 @@ const I18nContext = createContext<I18nContextType>({
 const Provider = I18nContext.Provider;
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<Language>("en");
-
-  useEffect(() => {
-    const stored = localStorage.getItem("language") as Language | null;
-    if (stored && dictionaries[stored]) setLanguageState(stored);
-  }, []);
+  const language = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   // Keep <html lang> in sync with the language actually shown
   useEffect(() => {
@@ -47,8 +90,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, [language]);
 
   const setLanguage = (lang: Language) => {
-    setLanguageState(lang);
-    localStorage.setItem("language", lang);
+    writeLanguage(lang);
   };
 
   const t = (key: string, vars?: TranslationVars): string => {

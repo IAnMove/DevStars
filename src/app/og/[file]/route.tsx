@@ -152,7 +152,7 @@ function profileCard(profile: LocalProfile, avatar: string | null) {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", maxWidth: hasScore ? 740 : 1070 }}>
             {avatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
+               
               <img
                 src={avatar}
                 width={168}

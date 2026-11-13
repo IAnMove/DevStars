@@ -1,4 +1,4 @@
-import { singleton } from "./singleton";
+import { singleton } from "./singleton.ts";
 
 /**
  * In-memory sliding-window rate limiter (no external services).
@@ -6,6 +6,10 @@ import { singleton } from "./singleton";
  * Each key keeps the timestamps of its recent hits (at most the largest
  * `limit` of its rules), so memory is bounded by maxKeys * maxLimit numbers.
  * State is per process and is lost on restart, which is fine for abuse control.
+ *
+ * Note: this file is also run directly by Node's native type stripping in
+ * tests, so it avoids non-erasable TypeScript syntax (no parameter properties,
+ * enums or namespaces) and uses explicit ".ts" import extensions.
  */
 
 export interface RateRule {
@@ -17,14 +21,15 @@ export type RateDecision = { ok: true } | { ok: false; retryAfterSec: number };
 
 export class SlidingWindowLimiter {
   private readonly hits = new Map<string, number[]>();
+  private readonly rules: RateRule[];
+  private readonly maxKeys: number;
   private readonly longestWindowMs: number;
   private readonly maxLimit: number;
   private calls = 0;
 
-  constructor(
-    private readonly rules: RateRule[],
-    private readonly maxKeys = 5000
-  ) {
+  constructor(rules: RateRule[], maxKeys = 5000) {
+    this.rules = rules;
+    this.maxKeys = maxKeys;
     this.longestWindowMs = Math.max(...rules.map((r) => r.windowMs));
     this.maxLimit = Math.max(...rules.map((r) => r.limit));
   }
