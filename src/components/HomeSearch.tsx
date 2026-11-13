@@ -1,87 +1,164 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import type { FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "@/lib/i18n";
 import { isValidUsername } from "@/lib/username";
-import { LanguageSelector } from "@/components/LanguageSelector";
-import { Nav } from "@/components/Nav";
-import { Footer } from "@/components/Footer";
+import { PageShell } from "@/components/PageShell";
+import { HomeTopFive } from "@/components/HomeTopFive";
+import type { HomeTopEntry } from "@/components/HomeTopFive";
+import { FOCUS_RING } from "@/lib/ui";
 
-export function HomeSearch() {
+const EXAMPLES = ["torvalds", "gaearon", "IAnMove"] as const;
+
+const INPUT_ID = "github-username";
+const HINT_ID = "github-username-hint";
+const ERROR_ID = "github-username-error";
+
+// Stored as a code (not as text) so the message follows the language switch
+type SearchError = "empty" | "invalid";
+
+/** "  @torvalds " → "torvalds" */
+function normalizeLogin(raw: string): string {
+  return raw.trim().replace(/^@/, "");
+}
+
+export function HomeSearch({
+  topEntries,
+}: {
+  /** Best rows of the ranking, read by the server; null when it could not read them. */
+  topEntries: HomeTopEntry[] | null;
+}) {
   const [username, setUsername] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<SearchError | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const { t } = useTranslation();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const trimmed = username.trim();
-    if (!trimmed) {
-      setError(t("search.error.empty"));
+    const login = normalizeLogin(username);
+    if (!login) {
+      setError("empty");
+      inputRef.current?.focus();
       return;
     }
-    if (!isValidUsername(trimmed)) {
-      setError(t("search.error.invalid"));
+    if (!isValidUsername(login)) {
+      setError("invalid");
+      inputRef.current?.focus();
       return;
     }
-    setError("");
-    router.push(`/user/${trimmed}`);
+    setError(null);
+    router.push(`/user/${encodeURIComponent(login)}`);
   };
 
+  // Brand: first word in white, the rest with the gradient
+  const [brandFirst, ...brandRest] = t("app.title").split(" ");
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center px-4">
-      <div className="absolute left-4 top-4">
-        <Nav />
-      </div>
-      <div className="absolute right-4 top-4">
-        <LanguageSelector />
-      </div>
+    <PageShell>
+      <div className="mx-auto w-full max-w-xl pt-4 sm:pt-10">
+        <div className="text-center">
+          <h1 className="mb-2 text-4xl font-bold tracking-tight sm:text-5xl">
+            <span className="text-white">{brandFirst}</span>
+            {brandRest.length > 0 && (
+              <>
+                {" "}
+                <span className="bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
+                  {brandRest.join(" ")}
+                </span>
+              </>
+            )}
+          </h1>
+          <p className="mb-8 text-base text-gray-300 sm:text-lg">
+            {t("app.subtitle")}
+            <br />
+            {t("app.subtitle2")}
+          </p>
+        </div>
 
-      <div className="w-full max-w-xl text-center">
-        <h1 className="mb-2 text-5xl font-bold tracking-tight">
-          <span className="text-white">GitHub</span>{" "}
-          <span className="bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
-            Stars
-          </span>
-        </h1>
-        <p className="mb-8 text-lg text-gray-400">
-          {t("app.subtitle")}
-          <br />
-          {t("app.subtitle2")}
-        </p>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row">
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => {
-              setUsername(e.target.value);
-              setError("");
-            }}
-            placeholder={t("search.placeholder")}
-            className="flex-1 rounded-lg border border-gray-700 bg-gray-900 px-4 py-3 text-white placeholder-gray-500 outline-none transition focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
-          />
-          <button
-            type="submit"
-            className="rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 font-semibold text-white transition hover:from-purple-600 hover:to-pink-600 active:scale-95"
-          >
-            {t("search.button")}
-          </button>
+        <form onSubmit={handleSubmit} noValidate role="search">
+          <label htmlFor={INPUT_ID} className="mb-2 block text-sm font-medium text-gray-200">
+            {t("search.label")}
+          </label>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <input
+              ref={inputRef}
+              id={INPUT_ID}
+              name="username"
+              type="text"
+              value={username}
+              onChange={(e) => {
+                setUsername(e.target.value);
+                setError(null);
+              }}
+              placeholder={t("search.placeholder")}
+              autoComplete="off"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="search"
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? `${HINT_ID} ${ERROR_ID}` : HINT_ID}
+              className={`min-h-11 min-w-0 flex-1 rounded-lg border bg-gray-900 px-4 py-3 text-base text-white transition placeholder:text-gray-400 ${
+                error ? "border-red-400" : "border-gray-600"
+              } ${FOCUS_RING}`}
+            />
+            <button
+              type="submit"
+              className={`min-h-11 rounded-lg bg-gradient-to-r from-purple-700 to-pink-700 px-6 py-3 font-semibold text-white transition hover:from-purple-600 hover:to-pink-600 active:scale-95 ${FOCUS_RING}`}
+            >
+              {t("search.button")}
+            </button>
+          </div>
+          <p id={HINT_ID} className="mt-2 text-xs text-gray-300">
+            {t("search.hint")}
+          </p>
+          {error && (
+            <p id={ERROR_ID} role="alert" className="mt-2 text-sm font-medium text-red-300">
+              {t(`search.error.${error}`)}
+            </p>
+          )}
         </form>
 
-        {error && (
-          <p className="mt-3 text-sm text-red-400">{error}</p>
-        )}
+        <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <p id="home-examples-label" className="text-sm text-gray-300">
+            {t("home.examples.label")}
+          </p>
+          <ul aria-labelledby="home-examples-label" className="flex flex-wrap items-center gap-2">
+            {EXAMPLES.map((login) => (
+              <li key={login}>
+                <Link
+                  href={`/user/${login}`}
+                  prefetch={false}
+                  className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-gray-700 bg-gray-900 px-3 text-sm text-gray-200 transition hover:border-purple-400 hover:text-white ${FOCUS_RING}`}
+                >
+                  @{login}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
 
-        <p className="mx-auto mt-12 max-w-lg text-xs leading-relaxed text-gray-400">
-          {t("app.disclaimer")}
-        </p>
-      </div>
+        <HomeTopFive entries={topEntries} />
 
-      <div className="absolute bottom-0 left-0 right-0">
-        <Footer />
+        <section
+          aria-labelledby="home-privacy-title"
+          className="mt-12 rounded-lg border border-gray-800 bg-gray-900 px-4 py-4"
+        >
+          <h2 id="home-privacy-title" className="text-base font-semibold text-white">
+            {t("home.privacy.title")}
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-gray-300">
+            {t("home.privacy.onTheFly")}
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-gray-300">
+            {t("home.privacy.saved", { button: t("leaderboard.save") })}
+          </p>
+        </section>
       </div>
-    </main>
+    </PageShell>
   );
 }

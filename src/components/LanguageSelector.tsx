@@ -2,6 +2,7 @@
 
 import { useTranslation } from "@/lib/i18n";
 import type { Language } from "@/lib/i18n";
+import { FOCUS_RING } from "@/lib/ui";
 
 // `name` is the autonym of each language (never translated)
 const LANGUAGES: { code: Language; label: string; name: string }[] = [
@@ -16,7 +17,7 @@ export function LanguageSelector() {
     <div
       role="group"
       aria-label={t("language.label")}
-      className="inline-flex rounded-lg border border-gray-700 bg-gray-900 p-0.5"
+      className="inline-flex shrink-0 rounded-lg border border-gray-700 bg-gray-900 p-0.5"
     >
       {LANGUAGES.map((lang) => {
         const active = language === lang.code;
@@ -27,9 +28,9 @@ export function LanguageSelector() {
             lang={lang.code}
             aria-pressed={active}
             onClick={() => setLanguage(lang.code)}
-            className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-md px-2 text-xs font-semibold transition ${
+            className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-md px-1 text-xs font-semibold transition sm:px-2 ${
               active ? "bg-purple-700 text-white" : "text-gray-300 hover:text-white"
-            }`}
+            } ${FOCUS_RING}`}
           >
             <span aria-hidden="true">{lang.label}</span>
             <span className="sr-only">{lang.name}</span>

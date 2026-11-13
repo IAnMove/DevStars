@@ -27,3 +27,18 @@ export function formatNumber(value: number, locale: string, maximumFractionDigit
 export function formatPercent(ratio: number, locale: string, maximumFractionDigits = 0): string {
   return new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits }).format(ratio);
 }
+
+/**
+ * Short calendar date ("Jan 5, 2025" / "5 ene 2025"). Always UTC so the
+ * server and the browser print the same text.
+ */
+export function formatDate(iso: string, locale: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return new Intl.DateTimeFormat(locale, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(date);
+}
